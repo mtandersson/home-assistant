@@ -51,16 +51,6 @@
       "calibrated_ref_cons": {
         "name": "Calibrated Ref Cons"
       },
-      "charging_state": {
-        "name": "Charging state",
-        "state": {
-          "charging_ac": "Charging (AC)",
-          "charging_dc": "Charging (DC)",
-          "charging_unknown": "Charging",
-          "not_charging": "Not charging",
-          "plugged_in": "Plugged in"
-        }
-      },
       "odometer": {
         "name": "Odometer"
       },

@@ -23,7 +23,7 @@ from datetime import datetime
 import logging
 from typing import Any
 
-from aioabrp import ChargingState, Metric, MetricValue, Telemetry
+from aioabrp import Metric, MetricValue, Telemetry
 
 from homeassistant.components.sensor import (
     RestoreSensor,
@@ -56,21 +56,6 @@ from .coordinator import AbrpTelemetryCoordinator, GarageVehicle
 _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 0
-
-
-# HA owns the charging_state option strings (the sensor's ``options`` list and
-# its translation keys live in this integration, not the library). The map is
-# total over ``ChargingState`` so ``native_value`` always resolves to a valid
-# option for any member the library emits. Kept HA-side — not derived from
-# ``ChargingState.value`` — so a library-side enum-value change cannot silently
-# alter this integration's entity state strings or its required translations.
-CHARGING_STATE_OPTIONS: dict[ChargingState, str] = {
-    ChargingState.CHARGING_AC: "charging_ac",
-    ChargingState.CHARGING_DC: "charging_dc",
-    ChargingState.CHARGING_UNKNOWN: "charging_unknown",
-    ChargingState.NOT_CHARGING: "not_charging",
-    ChargingState.PLUGGED_IN: "plugged_in",
-}
 
 
 def _is_clean_provider_str(value: object) -> bool:
@@ -136,27 +121,12 @@ class AbrpNumericSensorEntityDescription(AbrpTelemetrySensorEntityDescription[fl
     """Description for a numeric telemetry sensor (soc / power / voltage / ...)."""
 
 
-@dataclass(frozen=True, kw_only=True)
-class AbrpEnumSensorEntityDescription(AbrpTelemetrySensorEntityDescription[str]):
-    """Description for the categorical ENUM telemetry sensor (charging_state).
-
-    Overrides ``value_fn`` with a ``ChargingState``-typed variant because the
-    raw ``Telemetry`` field returns ``MetricValue[ChargingState]``; the parent's
-    ``T=str`` typing covers the coerced HA option string AFTER
-    ``_value_from_metric`` maps it.
-    """
-
-    value_fn: Callable[[Telemetry], MetricValue[ChargingState] | None]  # type: ignore[assignment]
-
-
 # Telemetry sensor catalogue. Each description binds a ``Metric`` whose typed
 # ``MetricValue`` the coordinator surfaces; the platform only creates an entity
 # once that metric first carries a non-None value for a given vehicle. The
 # ``key`` strings are intentionally HA-owned and decoupled from ``Metric.value``
 # so unique_ids / entity_ids stay stable across a library-side enum change.
-SENSORS: tuple[
-    AbrpNumericSensorEntityDescription | AbrpEnumSensorEntityDescription, ...
-] = (
+SENSORS: tuple[AbrpNumericSensorEntityDescription, ...] = (
     AbrpNumericSensorEntityDescription(
         key="soc",
         translation_key="soc",
@@ -277,21 +247,11 @@ SENSORS: tuple[
         metric=Metric.BATTERY_TEMPERATURE,
         value_fn=lambda t: t.battery_temperature,
     ),
-    AbrpEnumSensorEntityDescription(
-        key="charging_state",
-        translation_key="charging_state",
-        # ENUM device_class: a categorical state, not a measurement. No
-        # ``state_class`` and no unit — ENUM is LTS-ineligible (accepted).
-        device_class=SensorDeviceClass.ENUM,
-        options=list(CHARGING_STATE_OPTIONS.values()),
-        metric=Metric.CHARGING_STATE,
-        value_fn=lambda t: t.charging_state,
-    ),
 )
 
-SENSORS_BY_METRIC: dict[
-    Metric, AbrpNumericSensorEntityDescription | AbrpEnumSensorEntityDescription
-] = {description.metric: description for description in SENSORS}
+SENSORS_BY_METRIC: dict[Metric, AbrpNumericSensorEntityDescription] = {
+    description.metric: description for description in SENSORS
+}
 
 
 def _telemetry_unique_id(
@@ -335,22 +295,16 @@ def vehicles_without_sensors(
 
 
 def _extract_value(
-    description: AbrpNumericSensorEntityDescription | AbrpEnumSensorEntityDescription,
+    description: AbrpNumericSensorEntityDescription,
     metric_value: MetricValue,
-) -> float | str | None:
+) -> float | None:
     """Extract a description's display value from a MetricValue (presence probe).
 
     Mirrors the per-subclass ``_value_from_metric`` coercion without an entity
     instance, for the setup-time seed-frame scan that decides which entities to
-    create. Numeric → float; enum → mapped option string.
+    create.
     """
     value = metric_value.value
-    if isinstance(description, AbrpEnumSensorEntityDescription):
-        return (
-            CHARGING_STATE_OPTIONS.get(value)
-            if isinstance(value, ChargingState)
-            else None
-        )
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
     return None
@@ -360,16 +314,13 @@ def _build_telemetry_sensor(
     coordinator: AbrpTelemetryCoordinator,
     entry: AbetterrouteplannerConfigEntry,
     vehicle: GarageVehicle,
-    description: AbrpNumericSensorEntityDescription | AbrpEnumSensorEntityDescription,
-) -> AbrpTelemetrySensor[float] | AbrpTelemetrySensor[str]:
-    """Dispatch on the description type to the matching concrete sensor.
+    description: AbrpNumericSensorEntityDescription,
+) -> AbrpNumericSensor:
+    """Construct the concrete sensor for a telemetry description.
 
     Keeps the three instantiation sites (eager-from-registry probe,
-    seed-frame scan, dispatcher ``_on_new_metric``) free of a repeated
-    isinstance branch.
+    seed-frame scan, dispatcher ``_on_new_metric``) on a single factory.
     """
-    if isinstance(description, AbrpEnumSensorEntityDescription):
-        return AbrpEnumSensor(coordinator, entry, vehicle, description)
     return AbrpNumericSensor(coordinator, entry, vehicle, description)
 
 
@@ -703,33 +654,4 @@ class AbrpNumericSensor(AbrpTelemetrySensor[float]):
         value = metric_value.value
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return float(value)
-        return None
-
-
-class AbrpEnumSensor(AbrpTelemetrySensor[str]):
-    """The categorical ENUM telemetry sensor (charging_state)."""
-
-    entity_description: AbrpEnumSensorEntityDescription
-
-    def _restore_native_value(self, raw: object) -> str | None:
-        """Accept a restored string only when it is a current ``options`` member.
-
-        Belt-and-suspenders mirroring HA core's ENUM rejection: a restored
-        value outside ``options`` (e.g. the raw UPPER wire member, or junk
-        from a renamed option) is coerced to ``None`` rather than written
-        back — an out-of-``options`` value would make HA core raise
-        ``ValueError`` at state write.
-        """
-        options = self.entity_description.options or ()
-        return raw if isinstance(raw, str) and raw in options else None
-
-    def _value_from_metric(self, metric_value: MetricValue) -> str | None:
-        """Map the library ``ChargingState`` to this integration's option string.
-
-        Returns ``None`` for a non-``ChargingState`` value (defensive) so a
-        mis-bound metric surfaces as unavailable rather than raising.
-        """
-        value = metric_value.value
-        if isinstance(value, ChargingState):
-            return CHARGING_STATE_OPTIONS.get(value)
         return None
