@@ -37,7 +37,19 @@ class AbrpFlowHandler(
     @override
     def extra_authorize_data(self) -> dict[str, Any]:
         """Extra data that needs to be appended to the authorize url."""
-        return {"scope": " ".join(OAUTH2_SCOPES)}
+        data = {"scope": " ".join(OAUTH2_SCOPES)}
+        if self.source != SOURCE_REAUTH:
+            return data
+        try:
+            identity = parse_unverified_identity(
+                self._get_reauth_entry().data["token"].get("id_token")
+            )
+        except AbrpAuthError:
+            return data
+        # Only prefills the login page; the account is still checked on return.
+        if identity.email:
+            data["login_hint"] = identity.email
+        return data
 
     @override
     async def async_step_user(
