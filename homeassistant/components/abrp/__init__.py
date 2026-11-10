@@ -4,6 +4,7 @@ import logging
 
 from aioabrp import AbrpClient, TelemetryStream
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -63,12 +64,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: AbrpConfigEntry) -> None
 
     device_registry = dr.async_get(hass)
     known: set[int] = set()
+    # Device ids missing from the last garage fetch.
+    missing: set[str] = set()
 
     @callback
-    def _async_add_new_vehicles() -> None:
-        """Create a device per garage vehicle, then subscribe the stream to new ones."""
+    def _async_sync_vehicles() -> None:
+        """Mirror the garage into the device registry and the stream."""
+        nonlocal missing
+        # A failed poll keeps the last garage; it must not count as a fetch.
+        if not garage_coordinator.last_update_success:
+            return
+        identifiers: set[tuple[str, str]] = set()
         for raw in garage_coordinator.data:
-            scope = f"{entry.unique_id}_{raw.vehicle_id}"
+            identifier = (DOMAIN, f"{entry.unique_id}_{raw.vehicle_id}")
+            identifiers.add(identifier)
             manufacturer: str | Undefined | None = Undefined
             model: str | Undefined | None = Undefined
             if (display := raw.display) is not None:
@@ -84,7 +93,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: AbrpConfigEntry) -> None
                 )
             device_registry.async_get_or_create(
                 config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, scope)},
+                identifiers={identifier},
                 manufacturer=manufacturer,
                 model=model,
                 name=raw.name or raw.vehicle_model,
@@ -92,11 +101,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: AbrpConfigEntry) -> None
                     f"https://abetterrouteplanner.com/?vehicle_id={raw.vehicle_id}"
                 ),
             )
-        # Add-only: vehicles that leave the garage stay until the entry reloads.
+        stale = {
+            device.id
+            for device in dr.async_entries_for_config_entry(
+                device_registry, entry.entry_id
+            )
+            if device.identifiers.isdisjoint(identifiers)
+        }
+        # Two fetches in a row must miss a vehicle, so one bad response is harmless.
+        if removed := stale & missing:
+            for device_id in removed:
+                device_registry.async_remove_device(device_id)
+            # Reload so a vehicle that comes back gets its entities again.
+            hass.config_entries.async_schedule_reload(entry.entry_id)
+        missing = stale
+        known.clear()
         known.update(raw.vehicle_id for raw in garage_coordinator.data)
         stream.set_vehicle_ids(known)
 
-    _async_add_new_vehicles()
+    _async_sync_vehicles()
     await stream.start()
     entry.async_on_unload(stream.stop)
 
@@ -112,9 +135,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: AbrpConfigEntry) -> None
         garage_coordinator=garage_coordinator,
         telemetry_coordinator=telemetry_coordinator,
     )
-    entry.async_on_unload(
-        garage_coordinator.async_add_listener(_async_add_new_vehicles)
-    )
+    entry.async_on_unload(garage_coordinator.async_add_listener(_async_sync_vehicles))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -122,3 +143,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: AbrpConfigEntry) -> None
 async def async_unload_entry(hass: HomeAssistant, entry: AbrpConfigEntry) -> None:
     """Unload a config entry."""
     await hass.config_entries.async_unload_platforms_or_raise(entry, PLATFORMS)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: AbrpConfigEntry, device_entry: dr.AnyDeviceEntry
+) -> bool:
+    """Allow deleting a device only once its vehicle has left the garage."""
+    # Without a loaded garage, a still-present vehicle is re-created on setup.
+    if entry.state is not ConfigEntryState.LOADED:
+        return True
+    return not any(
+        (DOMAIN, f"{entry.unique_id}_{raw.vehicle_id}") in device_entry.identifiers
+        for raw in entry.runtime_data.garage_coordinator.data
+    )
