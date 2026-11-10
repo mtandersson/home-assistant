@@ -101,20 +101,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: AbrpConfigEntry) -> None
                     f"https://abetterrouteplanner.com/?vehicle_id={raw.vehicle_id}"
                 ),
             )
-        stale = {
-            device.id
-            for device in dr.async_entries_for_config_entry(
-                device_registry, entry.entry_id
-            )
-            if device.identifiers.isdisjoint(identifiers)
-        }
-        # Two fetches in a row must miss a vehicle, so one bad response is harmless.
-        if removed := stale & missing:
-            for device_id in removed:
-                device_registry.async_remove_device(device_id)
-            # Reload so a vehicle that comes back gets its entities again.
-            hass.config_entries.async_schedule_reload(entry.entry_id)
-        missing = stale
+        # An empty garage usually means a problem on ABRP's side.
+        if garage_coordinator.data:
+            stale = {
+                device.id
+                for device in dr.async_entries_for_config_entry(
+                    device_registry, entry.entry_id
+                )
+                if device.identifiers.isdisjoint(identifiers)
+            }
+            # Two fetches in a row must miss a vehicle; one bad response is harmless.
+            if removed := stale & missing:
+                for device_id in removed:
+                    device_registry.async_remove_device(device_id)
+                # Reload so a vehicle that comes back gets its entities again.
+                hass.config_entries.async_schedule_reload(entry.entry_id)
+            missing = stale
         known.clear()
         known.update(raw.vehicle_id for raw in garage_coordinator.data)
         stream.set_vehicle_ids(known)
@@ -152,7 +154,11 @@ async def async_remove_config_entry_device(
     # Without a loaded garage, a still-present vehicle is re-created on setup.
     if entry.state is not ConfigEntryState.LOADED:
         return True
-    return not any(
+    if any(
         (DOMAIN, f"{entry.unique_id}_{raw.vehicle_id}") in device_entry.identifiers
         for raw in entry.runtime_data.garage_coordinator.data
-    )
+    ):
+        return False
+    # Reload so the vehicle gets its entities again if it comes back.
+    hass.config_entries.async_schedule_reload(entry.entry_id)
+    return True

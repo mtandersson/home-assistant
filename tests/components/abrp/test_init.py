@@ -539,6 +539,8 @@ _FAILED = AbrpApiError("HTTP 503")
         ),
         pytest.param(_ONE, [_ONE], False, False, id="missing_at_setup_and_poll"),
         pytest.param(_BOTH, [_ONE, _ONE, _BOTH], True, True, id="back_after_removal"),
+        pytest.param(_BOTH, [[], []], True, False, id="empty_garage_twice"),
+        pytest.param(_BOTH, [[], _ONE], True, False, id="empty_garage_not_counted"),
     ],
 )
 async def test_vehicle_leaving_garage(
@@ -596,22 +598,23 @@ async def test_vehicle_leaving_garage(
 
 
 @pytest.mark.parametrize(
-    ("garage", "vehicle_id", "removable"),
+    ("garage", "vehicle_id", "removable", "streams"),
     [
-        pytest.param(_ONE, MOCK_VEHICLE_ID, False, id="in_garage"),
-        pytest.param(_ONE, MOCK_VEHICLE_ID_2, True, id="left_garage"),
-        pytest.param(_FAILED, MOCK_VEHICLE_ID, True, id="not_loaded"),
+        pytest.param(_ONE, MOCK_VEHICLE_ID, False, 1, id="in_garage"),
+        pytest.param(_ONE, MOCK_VEHICLE_ID_2, True, 2, id="left_garage"),
+        pytest.param(_FAILED, MOCK_VEHICLE_ID, True, 0, id="not_loaded"),
     ],
 )
-@pytest.mark.usefixtures("mock_telemetry_stream")
 async def test_remove_device(
     hass: HomeAssistant,
     config_entry_with_vehicles: MockConfigEntry,
     mock_abrp_client: AsyncMock,
     device_registry: dr.DeviceRegistry,
+    mock_telemetry_stream: MagicMock,
     garage: list[AbrpVehicle] | Exception,
     vehicle_id: int,
     removable: bool,
+    streams: int,
 ) -> None:
     """Only a device whose vehicle has left the garage can be deleted by hand."""
     mock_abrp_client.side_effect = repeat(garage)
@@ -626,3 +629,6 @@ async def test_remove_device(
         await async_remove_config_entry_device(hass, config_entry_with_vehicles, device)
         is removable
     )
+    await hass.async_block_till_done()
+    # Allowing a loaded entry's delete reloads it, which starts a second stream.
+    assert mock_telemetry_stream.call_count == streams
