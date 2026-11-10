@@ -1,0 +1,154 @@
+send_telemetry:
+  fields:
+    vehicle:
+      required: true
+      selector:
+        device:
+          integration: abrp
+    time:
+      selector:
+        datetime:
+    location:
+      example: '{"latitude": 59.3293, "longitude": 18.0686}'
+      selector:
+        location:
+          radius: false
+    soc:
+      example: 72
+      selector: &percent
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+          unit_of_measurement: "%"
+          mode: box
+    soh:
+      example: 96
+      selector: *percent
+    power:
+      example: -7.2
+      selector: &kw
+        number:
+          min: -1000
+          max: 1000
+          step: 0.1
+          unit_of_measurement: "kW"
+          mode: box
+    hvac_power:
+      example: 1.5
+      selector: *kw
+    voltage:
+      example: 400
+      selector:
+        number:
+          min: 0
+          max: 2000
+          step: 0.1
+          unit_of_measurement: "V"
+          mode: box
+    current:
+      example: -18
+      selector:
+        number:
+          min: -2000
+          max: 2000
+          step: 0.1
+          unit_of_measurement: "A"
+          mode: box
+    soe:
+      example: 55
+      selector: &kwh
+        number:
+          min: 0
+          max: 1000
+          step: 0.1
+          unit_of_measurement: "kWh"
+          mode: box
+    battery_capacity:
+      example: 77
+      selector: *kwh
+    charging_energy_added:
+      example: 12.5
+      selector: *kwh
+    odometer:
+      example: 12345
+      selector: &km
+        number:
+          min: 0
+          max: 10000000
+          step: 0.1
+          unit_of_measurement: "km"
+          mode: box
+    elevation:
+      example: 25
+      selector:
+        number:
+          min: -1000
+          max: 10000
+          step: 0.1
+          unit_of_measurement: "m"
+          mode: box
+    estimated_range:
+      example: 310
+      selector: *km
+    speed:
+      example: 80
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 0.1
+          unit_of_measurement: "km/h"
+          mode: box
+    heading:
+      example: 270
+      selector:
+        number:
+          min: 0
+          max: 360
+          step: 0.1
+          unit_of_measurement: "°"
+          mode: box
+    battery_temperature:
+      example: 18
+      selector: &celsius
+        number:
+          min: -100
+          max: 100
+          step: 0.1
+          unit_of_measurement: "°C"
+          mode: box
+    battery_temperature_min:
+      example: 16
+      selector: *celsius
+    battery_temperature_max:
+      example: 21
+      selector: *celsius
+    cabin_temperature:
+      example: 20
+      selector: *celsius
+    cabin_set_point:
+      example: 21
+      selector: *celsius
+    external_temperature:
+      example: 4
+      selector: *celsius
+    charging_state:
+      selector:
+        select:
+          translation_key: charging_state
+          options:
+            - charging_ac
+            - charging_dc
+            - charging_unknown
+            - not_charging
+            - plugged_in
+    driving_state:
+      selector:
+        select:
+          translation_key: driving_state
+          options:
+            - park
+            - reverse
+            - neutral
+            - drive

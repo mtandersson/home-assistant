@@ -80,6 +80,142 @@
     },
     "oauth2_token_refresh_failed": {
       "message": "Failed to refresh the OAuth2 access token."
+    },
+    "send_telemetry_failed": {
+      "message": "Failed to send telemetry to A Better Routeplanner: {error}"
+    },
+    "telemetry_write_not_granted": {
+      "message": "Home Assistant is not allowed to send telemetry to A Better Routeplanner yet; please re-authenticate to grant it."
+    },
+    "vehicle_not_in_garage": {
+      "message": "{vehicle} is not in the A Better Routeplanner garage of this account."
+    }
+  },
+  "selector": {
+    "charging_state": {
+      "options": {
+        "charging_ac": "[%key:component::abrp::entity::sensor::charging_state::state::charging_ac%]",
+        "charging_dc": "[%key:component::abrp::entity::sensor::charging_state::state::charging_dc%]",
+        "charging_unknown": "[%key:component::abrp::entity::sensor::charging_state::state::charging_unknown%]",
+        "not_charging": "[%key:component::abrp::entity::sensor::charging_state::state::not_charging%]",
+        "plugged_in": "[%key:component::abrp::entity::sensor::charging_state::state::plugged_in%]"
+      }
+    },
+    "driving_state": {
+      "options": {
+        "drive": "Drive",
+        "neutral": "Neutral",
+        "park": "Park",
+        "reverse": "Reverse"
+      }
+    }
+  },
+  "services": {
+    "send_telemetry": {
+      "description": "Sends a telemetry point for a vehicle to A Better Routeplanner, for example the state of charge reported by another integration.",
+      "fields": {
+        "battery_capacity": {
+          "description": "Usable battery capacity, in kWh.",
+          "name": "Battery capacity"
+        },
+        "battery_temperature": {
+          "description": "Battery temperature, in °C.",
+          "name": "Battery temperature"
+        },
+        "battery_temperature_max": {
+          "description": "Highest battery cell temperature, in °C.",
+          "name": "Highest battery temperature"
+        },
+        "battery_temperature_min": {
+          "description": "Lowest battery cell temperature, in °C.",
+          "name": "Lowest battery temperature"
+        },
+        "cabin_set_point": {
+          "description": "Climate target temperature, in °C.",
+          "name": "Cabin set point"
+        },
+        "cabin_temperature": {
+          "description": "Temperature inside the vehicle, in °C.",
+          "name": "Cabin temperature"
+        },
+        "charging_energy_added": {
+          "description": "Energy added during the current charging session, in kWh.",
+          "name": "Energy added"
+        },
+        "charging_state": {
+          "description": "Whether the vehicle is plugged in or charging.",
+          "name": "Charging state"
+        },
+        "current": {
+          "description": "Battery current, in A. Negative while charging, positive while driving.",
+          "name": "Current"
+        },
+        "driving_state": {
+          "description": "The gear the vehicle is in.",
+          "name": "Driving state"
+        },
+        "elevation": {
+          "description": "Elevation above sea level, in m.",
+          "name": "Elevation"
+        },
+        "estimated_range": {
+          "description": "Remaining range estimated by the vehicle, in km.",
+          "name": "Estimated range"
+        },
+        "external_temperature": {
+          "description": "Outside air temperature, in °C.",
+          "name": "Outside temperature"
+        },
+        "heading": {
+          "description": "Direction of travel, in degrees clockwise from north.",
+          "name": "Heading"
+        },
+        "hvac_power": {
+          "description": "Power used by heating and air conditioning, in kW.",
+          "name": "Climate power"
+        },
+        "location": {
+          "description": "Position of the vehicle.",
+          "name": "Location"
+        },
+        "odometer": {
+          "description": "Odometer reading, in km.",
+          "name": "Odometer"
+        },
+        "power": {
+          "description": "Battery power, in kW. Negative while charging, positive while driving.",
+          "name": "Power"
+        },
+        "soc": {
+          "description": "Battery state of charge, in %.",
+          "name": "State of charge"
+        },
+        "soe": {
+          "description": "Usable energy left in the battery, in kWh.",
+          "name": "Energy"
+        },
+        "soh": {
+          "description": "Battery state of health, in %.",
+          "name": "State of health"
+        },
+        "speed": {
+          "description": "Vehicle speed, in km/h.",
+          "name": "Speed"
+        },
+        "time": {
+          "description": "When the values were measured. Defaults to now.",
+          "name": "Time"
+        },
+        "vehicle": {
+          "description": "The A Better Routeplanner vehicle to send the telemetry for.",
+          "name": "Vehicle"
+        },
+        "voltage": {
+          "description": "Battery voltage, in V.",
+          "name": "Voltage"
+        }
+      },
+      "name": "Send telemetry"
     }
   }
 }
